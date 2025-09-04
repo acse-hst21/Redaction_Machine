@@ -1,0 +1,10 @@
+{
+  "name": "My Project Codespace",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu", 
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.9"
+    }
+  },
+  "postCreateCommand": "python -m venv .venv && source .venv/bin/activate && pip install --upgrade pip"
+}
