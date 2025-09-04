@@ -8,7 +8,25 @@ from unstructured.partition.auto import partition
 import tempfile
 from pathlib import Path
 from uuid import uuid4
-from typing import List
+from typing import List, Dict
+
+class Redaction():
+    def __init__(self, text: str, entities_to_redact: List[str]):
+        self.text = text
+        self.entities_to_redact = entities_to_redact
+    def run_redaction(self) -> List:
+        if not self.entities_to_redact:
+            # Resolving Presido bug
+            return []
+        return analyzer.analyze(text=self.text, entities=self.entities_to_redact, language='en')
+    def anonymize_results(self, results: List):
+        return anonymizer.anonymize(text=self.text, analyzer_results=results)
+    def bold_redacted_items(self, items: List[Dict[str, int]], new_text: str) -> str:
+        for item in items:
+            start = item['start']
+            end = item['end']
+            new_text = new_text[:start] + '**' + new_text[start:end] + '**' + new_text[end:]
+        return new_text
 
 st.title('Text Redaction App')
 
@@ -43,13 +61,6 @@ redact_options = st.sidebar.multiselect(
 
 anonymizer = AnonymizerEngine()
 
-def run_redaction(text: str, entities_to_redact: List[str]):
-    if not entities_to_redact:
-        # Resolving Presido bug
-        return []
-    return analyzer.analyze(text=text, entities=entities_to_redact, language='en')
-
-
 if input_mode == 'Text':
     default_text = 'My name is Hisham and my phone number is 07123456789'
 
@@ -72,18 +83,7 @@ elif input_mode == 'File Upload':
                 file_text += element.text + '\n'
         texts[uploaded_file.name] = file_text
 
-
-def anonymize_results(text: str, results):
-    return anonymizer.anonymize(text=text, analyzer_results=results)
-
 submit_button = st.button('Redact')
-
-def bold_redacted_items(text, items):
-    for item in items:
-        start = item['start']
-        end = item['end']
-        text = text[:start] + '**' + text[start:end] + '**' + text[end:]
-    return text
 
 if submit_button:
     if not texts:
@@ -92,16 +92,17 @@ if submit_button:
     
     text_results = {}
     progress_bar = st.progress(0)
+    redactor = Redaction(text=text, entities_to_redact=redact_options)
 
     for index, file_name in enumerate(texts):
         text = texts[file_name]
-        results = run_redaction(text, entities_to_redact=redact_options)
+        results = redactor.run_redaction()
 
         if not results:  
             text_results[file_name] = {"text": text, "items": []}
             continue
 
-        anonymized_text = anonymize_results(text, results)
+        anonymized_text = redactor.anonymize_results(results=results)
         results = json.loads(anonymized_text.to_json())
         text_results[file_name] = results
 
@@ -112,7 +113,7 @@ if submit_button:
         results = text_results[list(texts.keys())[0]]
 
         with st.expander("Preview Redacted Text"):
-            st.markdown(bold_redacted_items(results["text"], results["items"]))
+            st.markdown(redactor.bold_redacted_items(items=results['items'], new_text=results['text']))
 
         st.download_button(
             label="Download redacted file", 
